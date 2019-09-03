@@ -15,16 +15,19 @@ import json
 import threading
 import time
 import random
-#import pygame
+import pygame
+import subprocess
+import sys
+import os
 from datetime import datetime
 import RPi.GPIO as GPIO
 from RPLCD import CharLCD
 from Adafruit_LED_Backpack import SevenSegment
 #deklariere alle benötigten globalen Variablen
 GPIO.setmode(GPIO.BCM)
-#GPIO.setwarnings(False)
-#GPIO.setup(14,GPIO.OUT)
-#GPIO.setup(17,GPIO.OUT)
+GPIO.setwarnings(False)
+GPIO.setup(14,GPIO.OUT)
+GPIO.setup(17,GPIO.OUT)
 segment = SevenSegment.SevenSegment() #initialisiert Siebensegmentdisplay mit Standardadresse
 lcd = CharLCD(cols=16, rows=2, pin_rs=4, pin_e=17, pins_data=[18,22,23,24],numbering_mode = GPIO.BCM) #initialisiert LDC Display mit verwendeten Pins
 launchtime = 0 #Unixtimestamp des nächsten Starts
@@ -101,32 +104,39 @@ class button:
 		self.setLed(self.led_state)
 		self.blinking = False
 
-orange = button(20,21)
-black_left = button(26)
-black_right = button(19)
-green = button(16)
+LightB = button(20,21)
+ModeB_left = button(26)
+ModeB_right = button(19)
+PowerB = button(16)
 def buttons():
 	while True:
-		status1 = orange.readStatus()
+		status1 = LightB.readStatus()
 		if status1 == 1:
 			#do stuff
 		elif status == 2:
 			#do stuff
-		status2 = black_left.readStatus()
+		status2 = ModeB_left.readStatus()
 		if status2 == 1:
 			#do stuff
 		elif status2 == 2:
 			#do stuff
-		status3 = black_right.readStatus()
+		status3 = ModeB_right.readStatus()
 		if status3 == 1:
 			#do stuff
 		elif status3 == 2:
 			#do stuff
-		status4 = green.readStatus()
+		status4 = PowerB.readStatus()
 		if status4 == 1:
 			#do stuff
 		elif status4 == 2:
-			#do stuff
+			phase = 0
+			end = True
+			segment.clear()
+			lcd.clear()
+			lcd.cursor_pos = (0,0)
+			lcd.write_string("Goodbye")
+			time.sleep(2)
+			subprocess.call(['shutdown', '-h', 'now'], shell=False)
 
 def rocketengines():	#Flackern der Leds in den Triebwerken
 	engineLED.start(0)
@@ -146,27 +156,46 @@ def spotlight():	#Anschalten der Scheinwerfer
 	for b in range(0,100):	#Scheinwerfer werden für 50 Sekunden immer heller
 		spotLED.ChangeDutyCycle(b)
 		time.sleep(0.5)
-	#spotLED.on() 	#Scheinwerfer werden auf voller Helligkeit angelassen
+	spotLED.on() 	#Scheinwerfer werden auf voller Helligkeit angelassen
 
 def updatethread():	#Startzeit der nächsten Rakete wird ständig aus dem Internet gelesen und aktualisiert
 	global launchtime
 	global end
 	global data
+	last_check = 0
+	interval = 0
 	while True:
-		r = requests.get("https://launchlibrary.net/1.4/launch/next/1")	#Anfrage an Web-API, erhält JSON-Datei zurück
-		data = r.json() #Wandel JSON in dictionary um
-		status = (data["launches"][0]["status"])	#Auslesen des Status des nächsten Starts
-		if status == 1:		#Status 1 = Startzeit der Rakete steht fest und Rakete hat GO
-			launchtime = (data["launches"][0]["netstamp"])	#Startzeit wird ausgelesen und aktualisiert
-			end = False
-		elif status == 2 or status == 5:	#Status 2 = Startzeit nicht festgelegt oder Rakete hat NO GO, Status 5 = Start pausiert
-			end = True	#Abbruch Startsequenz
-		if phase == 5:
-			isPhase6(status)
-		if phase > 1:
-			time.sleep(20)	#Ab Phase 2: Aktualisiere alle 20 Sekunden
-		else:
-			time.sleep(60)	#Vor Phase 2: Warte 1 Minute bis zum erneuten Aktualisieren
+		if time.time() >= last_check + interval:
+			r = requests.get("https://launchlibrary.net/1.4/launch/next/1")	#Anfrage an Web-API, erhält JSON-Datei zurück
+			data = r.json() #Wandel JSON in dictionary um
+			status = (data["launches"][0]["status"])	#Auslesen des Status des nächsten Starts
+			if status == 1:		#Status 1 = Startzeit der Rakete steht fest und Rakete hat GO
+				launchtime = (data["launches"][0]["netstamp"])	#Startzeit wird ausgelesen und aktualisiert
+				end = False
+			elif status == 2 or status == 5:	#Status 2 = Startzeit nicht festgelegt oder Rakete hat NO GO, Status 5 = Start pausiert
+				end = True	#Abbruch Startsequenz
+			if phase == 5:
+				isPhase6(status)
+			if phase > 1:
+				interval = 20	#Ab Phase 2: Aktualisiere alle 20 Sekunden
+			else:
+				interval = 60	#Vor Phase 2: Warte 1 Minute bis zum erneuten Aktualisieren
+			last_check = time.time()
+			
+			if launchtime - time.time() < 3:
+				phase = 5
+			elif launchtime - time.time() < 7:
+				phase = 4
+			elif launchtime - time.time() < 61:
+				phase = 3
+			elif launchtime - time.time() < 3600:
+				phase = 2
+			elif launchtime - time.time() < 18000:
+				phase = 1
+			else:
+				phase = 0
+			if end = True:
+				phase = 0
 
 def isPhase6(status):
 	if status == 3 and phase > 0:		#Status 3 = Mission erfolgreich
@@ -265,11 +294,7 @@ def displaytime():
 	colon = True	#Doppelpunkt auf Display ist dauerhaft an
 	segmentClock(datetime.fromtimestamp(launchtime).strftime('%H%M'))	#Stelle die Startzeit der Rakete in der eingestellten Zeitzone auf dem 7 Segment Display dar
 
-def waitForT(t, freq):	#Warte bis die Zeit bis zum Start t Sekunden beträgt mit einer Genauigkeit von freq Sekunden
-	while launchtime - int(time.time()) > t:
-		time.sleep(freq)
-		if end == True:	#Hör auf zu warten falls Start abgebrochen wurde
-			break
+
 
 updatelaunch = threading.Thread(target=updatethread)
 info = threading.Thread(target=displayInfo)
