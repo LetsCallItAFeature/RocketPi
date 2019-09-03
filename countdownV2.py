@@ -196,6 +196,8 @@ def updatethread():	#Startzeit der nächsten Rakete wird ständig aus dem Intern
 				phase = 0
 			if end = True:
 				phase = 0
+				
+			buttons()
 
 def isPhase6(status):
 	if status == 3 and phase > 0:		#Status 3 = Mission erfolgreich
