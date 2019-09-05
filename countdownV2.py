@@ -33,7 +33,14 @@ lcd = CharLCD(cols=16, rows=2, pin_rs=4, pin_e=17, pins_data=[18,22,23,24],numbe
 launchtime = 0 #Unixtimestamp des nächsten Starts
 end = True #Wurde Start abgesagt/ ist Mission zuende? (egal ob erfolgreich oder nicht)
 phase = 0 #aktuelle Phase des Starts
-mode = 0
+mode = True #True = clock, False = launch only
+volume = 0.5
+mute = False
+setting_mode = False
+settings = {
+	0: {'name':'   brightness   ', 'type': 0, 'value': 8},
+	1: {'name':'     volume     ', 'type': 0, 'value': 8},
+	2: {'name':'      delay     ', 'type': 1, 'value': 0},
 data = {}
 colon = True #Zustand des Doppelpunktes auf dem 7 Segment Display
 engineLED = GPIO.PWM(14, 100) #Pin der Triebwerks-Leds
@@ -54,12 +61,12 @@ class button:
 		self.led_state = False
 		self.blinking = False
 		GPIO.setup(self.pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-		GPIO.add_event_detect(self.pin, GPIO.FALLING, callback=self.callback_event, bouncetime = 50)
+		GPIO.add_event_detect(self.pin, GPIO.FALLING, callback=self.callbackEvent, bouncetime = 50)
 		if self.led_pin > 0:
 			GPIO.setup(self.led_pin, GPIO.OUT)
 			GPIO.output(self.led_pin, GPIO.LOW)
 
-	def callback_event(self, channel):
+	def callbackEvent(self, channel):
 		start_time = time.time()
 		while GPIO.input(channel) == 0:
 			time.sleep(0.01)
@@ -104,6 +111,55 @@ class button:
 		self.setLed(self.led_state)
 		self.blinking = False
 
+class settingMenu:
+	setting = 0
+	def open(self):
+		global setting_mode
+		setting_mode = True
+		setting = 0
+		lcd.clear()
+		lcd.cursor_pos = (0,0)
+		lcd.write_string(settings[0]['name'])
+		lcd.cursor_pos = (1,0)
+		lcd.write_string(self.bar(0))
+	
+	def showNew(self):
+		lcd.clear
+		lcd.cursor_pos = (0,0)
+		lcd.write_string(settings[self.setting]['name'])
+		lcd.cursor_pos = (1,0)
+		s_type = settings[self.setting]['type']
+		if  s_type == 0:
+			lcd.write_string(self.bar(settings[self.setting]['value']))
+		else:
+			lcd.write_string(self.hold(settings[self.setting]['value']))
+	
+	def next(self):
+		self.setting += 1
+		if self.setting = 3:
+			self.setting = 0
+		self.showNew()
+	
+	def prev(self):
+		self.setting -= 1
+		if self.setting = -1:
+			self.setting = 2
+		self.showNew()
+			
+	def bar(self, value):
+		clearLine(1)
+		line_string = ''
+		for i in range(0,value):
+			line_string += char(255)
+		return line_string
+	
+	def time(self, value):
+		clearLine(1)
+		val_string = str(settings[self.setting]['value'])
+		line_string = 'hold %02d:%d0 reset' % (val_string[0,1], val_string[2])
+		return line_string
+		
+		
 LightB = button(20,21)
 ModeB_left = button(26)
 ModeB_right = button(19)
@@ -117,17 +173,28 @@ def buttons():
 			#do stuff
 		status2 = ModeB_left.readStatus()
 		if status2 == 1:
-			#do stuff
+			if setting_mode == True:
+				settingMenu.left()
 		elif status2 == 2:
-			#do stuff
+			if setting_mode == True:
+				settingMenu.prev()
 		status3 = ModeB_right.readStatus()
 		if status3 == 1:
-			#do stuff
+			if setting_mode == True:
+				settingMenu.right()
 		elif status3 == 2:
-			#do stuff
+			if setting_mode == True:
+				settingMenu.next()
+			else:
+				settingMenu.open()
 		status4 = PowerB.readStatus()
 		if status4 == 1:
-			#do stuff
+			if mute == False:
+				track.set_volume(0)
+				mute = True
+			else:
+				track.set_volume(volume)
+				mute  = False
 		elif status4 == 2:
 			phase = 0
 			end = True
@@ -281,6 +348,10 @@ def display(line1, line2):	#Stelle 2 Zeilen auf LCD Display dar. Scrolle falls n
 			else:
 				time.sleep(0.4)
 		time.sleep(1)
+		
+def clearLine(line):
+	lcd.cursor_pos = (line,0)
+	lcd.write_string("                ")
 
 def getInfo():	#erhalte Informationen zum Start von Web-API
 	try:
