@@ -41,6 +41,7 @@ settings = {
 	0: {'name':'   brightness   ', 'type': 0, 'value': 8},
 	1: {'name':'     volume     ', 'type': 0, 'value': 8},
 	2: {'name':'      delay     ', 'type': 1, 'value': 0},
+	3: {'name':'   mute time    ', 'type': 2, 'value': {'beginn': 0, 'end': 0}}}
 data = {}
 colon = True #Zustand des Doppelpunktes auf dem 7 Segment Display
 engineLED = GPIO.PWM(14, 100) #Pin der Triebwerks-Leds
