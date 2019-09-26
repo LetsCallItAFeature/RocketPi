@@ -3,8 +3,7 @@
 #	und einem 4-stelligen 7-Segment-Display mit zentralem Doppelpunkt und I2C Backpack für Zeiten
 #	und den Countdown.
 #
-#	Version mit englischen Kommentaren folgt bald
-#	English version coming soon
+#	
 #
 #	Autor: Kai Arnetzl
 ######################################################################################################
@@ -41,7 +40,8 @@ settings = {
 	0: {'name':'   brightness   ', 'type': 0, 'value': 8},
 	1: {'name':'     volume     ', 'type': 0, 'value': 8},
 	2: {'name':'      delay     ', 'type': 1, 'value': 0},
-	3: {'name':'   mute time    ', 'type': 2, 'value': {'beginn': 0, 'end': 0}}}
+	3: {'name':'auto  brightness', 'type': 2, 'value': True}, 
+	4: {'name':'   mute time    ', 'type': 3, 'value': {'beginn': 0, 'end': 0}}}
 data = {}
 colon = True #Zustand des Doppelpunktes auf dem 7 Segment Display
 engineLED = GPIO.PWM(14, 100) #Pin der Triebwerks-Leds
@@ -156,7 +156,7 @@ class settingMenu:
 	
 	def time(self, value):
 		clearLine(1)
-		val_string = str(settings[self.setting]['value'])
+		val_string = str(settings[self.setting]['value']))
 		line_string = 'hold %02d:%d0 reset' % (val_string[0,1], val_string[2])
 		return line_string
 		
