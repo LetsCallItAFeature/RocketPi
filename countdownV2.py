@@ -160,7 +160,16 @@ class settingMenu:
 		line_string = 'hold %02d:%d0 reset' % (val_string[0,1], val_string[2])
 		return line_string
 		
-		
+	def boolSet(self, value):
+		clearLine(1)
+		if value == True:
+			state = 'On'
+		else:
+			state = 'Off'
+		line_string = '      ' + state + '       '
+		return line_string
+	
+	
 LightB = button(20,21)
 ModeB_left = button(26)
 ModeB_right = button(19)
