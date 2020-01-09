@@ -40,8 +40,7 @@ settings = {
 	0: {'name':'   brightness   ', 'type': 0, 'value': 8},
 	1: {'name':'     volume     ', 'type': 0, 'value': 8},
 	2: {'name':'      delay     ', 'type': 1, 'value': 0},
-	3: {'name':'auto  brightness', 'type': 2, 'value': True}, 
-	4: {'name':'   mute time    ', 'type': 3, 'value': {'beginn': 0, 'end': 0}}}
+	3: {'name':'auto  brightness', 'type': 2, 'value': True}}
 data = {}
 colon = True #Zustand des Doppelpunktes auf dem 7 Segment Display
 engineLED = GPIO.PWM(14, 100) #Pin der Triebwerks-Leds
@@ -133,7 +132,7 @@ class settingMenu:
 		if  s_type == 0:
 			lcd.write_string(self.bar(settings[self.setting]['value']))
 		else:
-			lcd.write_string(self.hold(settings[self.setting]['value']))
+			lcd.write_string(self.delay(settings[self.setting]['value']))
 	
 	def next(self):
 		self.setting += 1
@@ -148,25 +147,22 @@ class settingMenu:
 		self.showNew()
 			
 	def bar(self, value):
-		clearLine(1)
 		line_string = ''
 		for i in range(0,value):
 			line_string += char(255)
 		return line_string
 	
-	def time(self, value):
-		clearLine(1)
+	def delay(self, value):
 		val_string = str(settings[self.setting]['value']))
 		line_string = 'hold %02d:%d0 reset' % (val_string[0,1], val_string[2])
 		return line_string
 		
-	def boolSet(self, value):
-		clearLine(1)
+	def bool(self, value):
 		if value == True:
 			state = 'On'
 		else:
 			state = 'Off'
-		line_string = '      ' + state + '       '
+		line_string = '      ' + state
 		return line_string
 	
 	
@@ -174,6 +170,7 @@ LightB = button(20,21)
 ModeB_left = button(26)
 ModeB_right = button(19)
 PowerB = button(16)
+
 def buttons():
 	while True:
 		status1 = LightB.readStatus()
@@ -211,7 +208,7 @@ def buttons():
 			segment.clear()
 			lcd.clear()
 			lcd.cursor_pos = (0,0)
-			lcd.write_string("Goodbye")
+			lcd.write_string("     Goodbye")
 			time.sleep(2)
 			subprocess.call(['shutdown', '-h', 'now'], shell=False)
 
@@ -228,12 +225,19 @@ def engineFadeout():	#Leds in den Triebwerken glühen für ~10 Sekunden aus
 	for b in range(0,61):
 		engineLED.ChangeDutyCycle(60 - i)
 		time.sleep(0.15)
+	engineLED.off()
 
 def spotlight():	#Anschalten der Scheinwerfer
 	for b in range(0,100):	#Scheinwerfer werden für 50 Sekunden immer heller
 		spotLED.ChangeDutyCycle(b)
 		time.sleep(0.5)
 	spotLED.on() 	#Scheinwerfer werden auf voller Helligkeit angelassen
+	
+def spotlightFadeout():	#Scheinwerfer werden langsam ausgeschaltet
+	for b in range(0,100):
+		spotLED.ChangeDutyCycle(100 - i)
+		time.sleep(0.5)
+	spotLED.off()
 
 def updatethread():	#Startzeit der nächsten Rakete wird ständig aus dem Internet gelesen und aktualisiert
 	global launchtime
@@ -277,17 +281,17 @@ def updatethread():	#Startzeit der nächsten Rakete wird ständig aus dem Intern
 			buttons()
 
 def isPhase6(status):
-	if status == 3 and phase > 0:		#Status 3 = Mission erfolgreich
-		display("SUCCSESS!"," ")
+	if status == 3 and phase > 0:		#Status 3 = Start erfolgreich
+		display("    SUCCSESS!"," ")
 		end = True
 	elif status == 4 and phase > 0:		#Status 4 = Start fehlgeschlagen
-		display("FAILURE"," ")
+		display("     FAILURE"," ")
 		end = True
-	elif status == 7 and phase > 0:		#Status 7 = Teilweiser Fehlschlag (z.B. nicht-stabiler Orbit)
-		display("PARTIAL","FAILURE")
+	elif status == 7 and phase > 0:		#Status 7 = Teilweiser Fehlschlag (z.B. nicht stabiler Orbit)
+		display("     PARTIAL","     FAILURE")
 		end = True
 	elif (time.time() - launchtime) > 3598:	#Timeout; nach 60 Minuten wird Start als abgeschlossen angesehen
-		display("TIMEOUT", " ")
+		display("     TIMEOUT", " ")
 		end = True
 
 def countdownthread():	#Countdown ab T-59:59
@@ -326,10 +330,14 @@ def displayInfo():	#Stelle Informationen zu der Mission auf LCD dar
 	while phase >= 1:
 		while int(time.time()) < (oldTime+10):
 			time.sleep(0.1)
+			while setting_mode == True:
+				time.sleep(0.1)
 		oldTime = int(time.time())
 		display(name, lsp)	#Zeige für 10 Sekunden Name der Rakete & Mission und Launch Service Provider
 		while int(time.time()) < (oldTime+10):
 			time.sleep(0.1)
+			while setting_mode == True:
+				time.sleep(0.1)
 		oldTime = int(time.time())
 		display(mission, launchpad)	#Zeige für 10 Sekunden Art der Mission und Start
 
@@ -359,7 +367,7 @@ def display(line1, line2):	#Stelle 2 Zeilen auf LCD Display dar. Scrolle falls n
 				time.sleep(0.4)
 		time.sleep(1)
 		
-def clearLine(line):
+def clearLine(line):	#löscht nur den Inhalt einer Zeile, nicht gleich beide
 	lcd.cursor_pos = (line,0)
 	lcd.write_string("                ")
 
