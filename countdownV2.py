@@ -39,8 +39,8 @@ setting_mode = False
 settings = {
 	0: {'name':'   brightness   ', 'type': 0, 'value': 8},
 	1: {'name':'     volume     ', 'type': 0, 'value': 8},
-	2: {'name':'      delay     ', 'type': 1, 'value': 0},
-	3: {'name':'auto  brightness', 'type': 2, 'value': True}}
+	2: {'name':'      delay     ', 'type': 2, 'value': 0},
+	3: {'name':'auto  brightness', 'type': 1, 'value': True}}
 data = {}
 colon = True #Zustand des Doppelpunktes auf dem 7 Segment Display
 engineLED = GPIO.PWM(14, 100) #Pin der Triebwerks-Leds
@@ -50,6 +50,78 @@ GPIO.output(15, GPIO.HIGH)
 segment.begin()
 pygame.init()
 track = pygame.mixer.Sound('Rocket Start Track.wav')
+
+rocket11 = (
+	0b00100,
+	0b01010,
+	0b10001,
+	0b10001,
+	0b10001,
+	0b01010,
+	0b01010,
+	0b01010,)
+
+lcd.create_char(0,rocket11)
+
+rocket12 = (
+	0b01010,
+	0b01010,
+	0b01010,
+	0b01010,
+	0b11011,
+	0b11011,
+	0b11111,
+	0b10101,)
+
+lcd.create_char(1,rocket12)
+
+rocket21 = (
+	0b10001,
+	0b01010,
+	0b01010,
+	0b01010,
+	0b01010,
+	0b01010,
+	0b01010,
+	0b01010,)
+
+lcd.create_char(2,rocket21)
+
+rocket22 = (
+	0b11011,
+	0b11011,
+	0b11111,
+	0b10101,
+	0b00100,
+	0b01110,
+	0b01110,
+	0b11111,)
+
+lcd.create_char(3,rocket22)
+
+rocket32 = (
+	0b00100,
+	0b01110,
+	0b01110,
+	0b11111,
+	0b11111,
+	0b11111,
+	0b01110,
+	0b01010,)
+
+lcd.create_char(4,rocket32)
+
+rocket42 = (
+	0b11111,
+	0b11111,
+	0b01110,
+	0b01010,
+	0b00000,
+	0b00000,
+	0b00000,
+	0b00000,)
+
+lcd.create_char(5,rocket42)
 
 class button:
 	def __init__(self, pin, led_pin = 0, debounce = 0.05, long_press = 0.5):
@@ -165,7 +237,33 @@ class settingMenu:
 		line_string = '      ' + state
 		return line_string
 	
-	
+	def left(self):
+		if settings[self.setting]['type'] == 0:
+			settings[self.setting]['value'] -= 1
+		elif settings[self.setting]['type'] == 1:
+			settings[self.setting]['value'] != settings[self.setting]['value']
+		else:
+			
+	def right(self):
+		if settings[self.setting]['type'] == 0:
+			settings[self.setting]['value'] += 1
+		elif settings[self.setting]['value'] == 1
+			settings[self.setting]['value'] != settings[self.setting]['value']
+		else:
+			
+				 
+	def update(self):
+		clearLine(1)
+		lcd.cursor_pos = (1,0)
+		if settings[self.setting]['type'] == 0:
+			lcd.write_string(self.bar(settings[self.setting]['value']))
+		elif settings[self.setting]['type'] == 1:
+			lcd.write_string(self.bool(settings[self.setting]['value']))
+		else
+			lcd.write_string(self.delay(settings[self.setting]['value']))
+		
+		
+				 
 LightB = button(20,21)
 ModeB_left = button(26)
 ModeB_right = button(19)
@@ -205,6 +303,7 @@ def buttons():
 		elif status4 == 2:
 			phase = 0
 			end = True
+			time.sleep(2)	#Damit alle Threads beendet sind
 			segment.clear()
 			lcd.clear()
 			lcd.cursor_pos = (0,0)
@@ -217,7 +316,7 @@ def rocketengines():	#Flackern der Leds in den Triebwerken
 	for b in range(0,60):	#Für 3 Sekunden wird geflacker immer heller
 		engineLED.ChangeDutyCycle(random.uniform(0,b))
 		time.sleep(0.05)
-	while phase == 5:	#Flackern während des Restes der Phase 5 mit voller maximaler Helligkeit
+	while phase == 5:
 		engineLED.ChangeDutyCycle(random.uniform(30,100))
 		time.sleep(0.05)
 
@@ -365,9 +464,11 @@ def display(line1, line2):	#Stelle 2 Zeilen auf LCD Display dar. Scrolle falls n
 				time.sleep(1)
 			else:
 				time.sleep(0.4)
+			if setting_mode == True:
+				return
 		time.sleep(1)
 		
-def clearLine(line):	#löscht nur den Inhalt einer Zeile, nicht gleich beide
+def clearLine(line):	#löscht nur den Inhalt einer Zeile, nicht gleich beide. "line" kann 0 oder 1 sein.
 	lcd.cursor_pos = (line,0)
 	lcd.write_string("                ")
 
@@ -376,7 +477,7 @@ def getInfo():	#erhalte Informationen zum Start von Web-API
 		name = (data["launches"][0]["name"])	#lies Namen der Rakete & Mission ab
 		launchpad = (data["launches"][0]["location"]["name"])	#lies Ort der Startrampe ab
 		mission = (data["launches"][0]["missions"][0]["typeName"])	#lies Art der Mission (z.B. Kommunikation) ab
-		lsp = (data["launches"][0]["lsp"]["name"])	#lies Name des Launch Service Providers (z.B. NASA) ab
+		lsp = (data["launches"][0]["lsp"]["name"])	#lies den Namen des Launch Service Providers (z.B. SpaceX) ab
 		return (name, launchpad, mission, lsp)
 	except:
 		return (" "," "," "," ")
@@ -386,12 +487,11 @@ def displaytime():
 	segmentClock(datetime.fromtimestamp(launchtime).strftime('%H%M'))	#Stelle die Startzeit der Rakete in der eingestellten Zeitzone auf dem 7 Segment Display dar
 
 
-
 updatelaunch = threading.Thread(target=updatethread)
 info = threading.Thread(target=displayInfo)
 countdown = threading.Thread(target=countdownthread)
 updatelaunch.start()	#Fang an, Startzeit und Status regelmäßig zu aktualisieren
-display("Starting"," ")
+display("    Starting"," ")
 while True:
 	#Phase 0: Warte, bis der nächste Start einer Rakete 5 Stunden entfernt ist
 	#Setze alle Anzeigen und LEDs zurück
