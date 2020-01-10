@@ -35,7 +35,6 @@ launchid = 0
 end = True #Wurde Start abgesagt/ ist Mission zuende? (egal ob erfolgreich oder nicht)
 phase = 0 #aktuelle Phase des Starts
 mode = True #True = clock, False = launch only
-lcd_showing = 0
 volume = 0.5
 mute = False
 setting_mode = False
@@ -293,7 +292,58 @@ class settingMenu:
 		else
 			lcd.write_string(self.delay(settings[self.setting]['value']))
 		
+class lcdWriter():
+	def __init__(self, lcd_obj):
+		self.lcd = lcd_obj
+		self.power = False
+		self.end = False
+		self.running = False
+		self.current_priority = 0
+		self.queue = ['', '', 0, 0]
 		
+	def startLcdWriter(self):
+		if self.running == False:
+			self.running = True
+			writer = threading.Thread(target=self.writerFunction, daemon = True)
+			writer.start()
+			
+	def writeLCD(self, line1, line2, priority = 0, duration = 0):
+		self.queue = [line1, line2, priority, duration]
+		
+	def LCDPower(self, state):
+		self.power = state
+		
+	def LCDBrightness(self, brightness):
+	
+	def writerFunction(self):
+		while True:
+			if priority >= lcd_showing:
+		lcd.clear()
+		length = len(line1)
+		if len(line2) > length:	#Wie lang ist der längste String?
+		length = len(line2)
+	if len(line1) <= 16:	#Schreib Zeile 1 auf LCD falls diese komplett passt (maximale Länge ist 16 Zeichen)
+		lcd.cursor_pos = (0,0)
+		lcd.write_string(line1)
+	if len(line2) <= 16:	#Schreib Zeile 2 auf LCD falls diese komplett passt (maximale Länge ist 16 Zeichen)
+		lcd.cursor_pos = (1,0)
+		lcd.write_string(line2)
+	if length > 16:		#Falls eine Zeile länger als 16 Zeichen ist...
+		for i in range(length - 15):
+			if len(line1) > 16 and len(line1) >= i + 16:	#Falls Zeile 1 zu lang ist, scrolle diese
+				lcd.cursor_pos = (0,0)
+				lcd.write_string(line1[i:i+16])
+			if len(line2) > 16 and len(line2) >= i + 16:	#Falls Zeile 2 zu lang ist, scrolle diese
+				lcd.cursor_pos = (1,0)
+				lcd.write_string(line2[i:i+16])
+
+			if i == 0:	#Warte 1 Sekunde bevor gescrollt wird, scrolle anschließend mit 0,4 Sekunden/Zeichen
+				time.sleep(1)
+			else:
+				time.sleep(0.4)
+			if setting_mode == True:
+				return
+		time.sleep(1)
 
 LightB = button(20,21)
 ModeB_left = button(26)
@@ -479,34 +529,7 @@ def displayInfo():	#Stelle Informationen zu der Mission auf LCD dar
 		display(mission, launchpad)	#Zeige für 10 Sekunden Art der Mission und Start
 
 def display(line1, line2, priority = 0, duration = 0):	#Stelle 2 Zeilen auf LCD Display dar. Scrolle falls nötig.
-	global lcd_showing
-	if priority >= lcd_showing:
-		lcd.clear()
-		length = len(line1)
-		if len(line2) > length:	#Wie lang ist der längste String?
-		length = len(line2)
-	if len(line1) <= 16:	#Schreib Zeile 1 auf LCD falls diese komplett passt (maximale Länge ist 16 Zeichen)
-		lcd.cursor_pos = (0,0)
-		lcd.write_string(line1)
-	if len(line2) <= 16:	#Schreib Zeile 2 auf LCD falls diese komplett passt (maximale Länge ist 16 Zeichen)
-		lcd.cursor_pos = (1,0)
-		lcd.write_string(line2)
-	if length > 16:		#Falls eine Zeile länger als 16 Zeichen ist...
-		for i in range(length - 15):
-			if len(line1) > 16 and len(line1) >= i + 16:	#Falls Zeile 1 zu lang ist, scrolle diese
-				lcd.cursor_pos = (0,0)
-				lcd.write_string(line1[i:i+16])
-			if len(line2) > 16 and len(line2) >= i + 16:	#Falls Zeile 2 zu lang ist, scrolle diese
-				lcd.cursor_pos = (1,0)
-				lcd.write_string(line2[i:i+16])
-
-			if i == 0:	#Warte 1 Sekunde bevor gescrollt wird, scrolle anschließend mit 0,4 Sekunden/Zeichen
-				time.sleep(1)
-			else:
-				time.sleep(0.4)
-			if setting_mode == True:
-				return
-		time.sleep(1)
+	
 		
 def clearLine(line):	#löscht nur den Inhalt einer Zeile, nicht gleich beide. "line" kann 0 oder 1 sein.
 	lcd.cursor_pos = (line,0)
