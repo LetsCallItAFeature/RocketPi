@@ -30,6 +30,7 @@ GPIO.setup(17,GPIO.OUT)
 segment = SevenSegment.SevenSegment() #initialisiert Siebensegmentdisplay mit Standardadresse
 lcd = CharLCD(cols=16, rows=2, pin_rs=4, pin_e=17, pins_data=[18,22,23,24],numbering_mode = GPIO.BCM) #initialisiert LDC Display mit verwendeten Pins
 launchtime = 0 #Unixtimestamp des nächsten Starts
+launchid = 0
 end = True #Wurde Start abgesagt/ ist Mission zuende? (egal ob erfolgreich oder nicht)
 phase = 0 #aktuelle Phase des Starts
 mode = True #True = clock, False = launch only
@@ -346,8 +347,12 @@ def updatethread():	#Startzeit der nächsten Rakete wird ständig aus dem Intern
 	interval = 0
 	while True:
 		if time.time() >= last_check + interval:
-			r = requests.get("https://launchlibrary.net/1.4/launch/next/1")	#Anfrage an Web-API, erhält JSON-Datei zurück
+			if launchtime - time.time() >= 0 or launchtime - time.time() < -3598:
+				r = requests.get("https://launchlibrary.net/1.4.2/launch/next/1")	#Anfrage an Web-API, erhält JSON-Datei zurück
+			else:
+				r = requests.get("https://launchlibrary.net/1.4.2/launch/" + str(launchid))
 			data = r.json() #Wandel JSON in dictionary um
+			launchid = (data["launches"][0]["id"])
 			status = (data["launches"][0]["status"])	#Auslesen des Status des nächsten Starts
 			if status == 1:		#Status 1 = Startzeit der Rakete steht fest und Rakete hat GO
 				launchtime = (data["launches"][0]["netstamp"])	#Startzeit wird ausgelesen und aktualisiert
