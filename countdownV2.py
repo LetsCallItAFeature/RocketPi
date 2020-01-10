@@ -50,7 +50,7 @@ GPIO.setup(15, GPIO.OUT)
 GPIO.output(15, GPIO.HIGH)
 segment.begin()
 pygame.init()
-track = pygame.mixer.Sound('Rocket Start Track.wav')
+track = pygame.mixer.Sound('Rocket_Start_Track.wav')
 
 rocket11 = (
 	0b00100,
@@ -275,15 +275,18 @@ def buttons():
 		status1 = LightB.readStatus()
 		if status1 == 1:
 			#do stuff
-		elif status == 2:
+		elif status1 == 2:
 			#do stuff
-		status2 = ModeB_left.readStatus()
-		if status2 == 1:
-			if setting_mode == True:
-				settingMenu.left()
-		elif status2 == 2:
-			if setting_mode == True:
-				settingMenu.prev()
+		if settingMenu.setting != 4 and settingMenu.isOpen:
+			status2 = ModeB_left.readStatus()
+			if status2 == 1:
+				if setting_mode == True:
+					settingMenu.left()
+			elif status2 == 2:
+				if setting_mode == True:
+					settingMenu.prev()
+				else:
+					settingMenu.open()
 		status3 = ModeB_right.readStatus()
 		if status3 == 1:
 			if setting_mode == True:
