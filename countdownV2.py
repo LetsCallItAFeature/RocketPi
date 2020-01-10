@@ -9,6 +9,7 @@
 ######################################################################################################
 
 #importiere alle benötigten Module
+from decimal import *
 import requests
 import json
 import threading
@@ -34,6 +35,7 @@ launchid = 0
 end = True #Wurde Start abgesagt/ ist Mission zuende? (egal ob erfolgreich oder nicht)
 phase = 0 #aktuelle Phase des Starts
 mode = True #True = clock, False = launch only
+lcd_showing = 0
 volume = 0.5
 mute = False
 setting_mode = False
@@ -168,24 +170,29 @@ class button:
 			GPIO.output(self.led_pin, GPIO.LOW)
 			self.led_state = False
 
-	def blinkLed(self, period):
+	def blinkLed(self, frequency):
 		if self.blinking == False:
 			self.blinking = True
-			blink = threading.Thread(target=self.blink_function, args=(period,), daemon = True)
+			blink = threading.Thread(target=self.blink_function, args=(frequency,), daemon = True)
 			blink.start()
 
-	def blink_function(self, period):
+	def blink_function(self, frequency):
 		og_state = self.led_state
 		while og_state == self.led_state:
 			GPIO.output(self.led_pin, GPIO.HIGH)
-			time.sleep(period/2)
+			time.sleep(frequency/2)
 			GPIO.output(self.led_pin, GPIO.LOW)
-			time.sleep(period/2)
+			time.sleep(frequency/2)
 		self.setLed(self.led_state)
 		self.blinking = False
 
 class settingMenu:
-	setting = 0
+	def __init__(self):
+		self.setting = 0
+		self.step = 0.5
+		self.presses = 0
+		self.last_press = 0
+	
 	def open(self):
 		global setting_mode
 		setting_mode = True
@@ -223,11 +230,16 @@ class settingMenu:
 		line_string = ''
 		for i in range(0,value):
 			line_string += char(255)
+		line_string = f'{line_string:16}
 		return line_string
 	
 	def delay(self, value):
-		val_string = str(settings[self.setting]['value']))
-		line_string = 'hold %02d:%d0 reset' % (val_string[0,1], val_string[2])
+		minutes = int((settings[self.setting]['value']/60)%60)
+		seconds = int(settings[self.setting]['value'] % 60)
+		halves = '0'
+		if settings[self.setting]['value'].is_integrer:
+			halves = '5'
+		line_string = '    %02d:%02d.%s' % (minutes, seconds, halves)
 		return line_string
 		
 	def bool(self, value):
@@ -235,7 +247,7 @@ class settingMenu:
 			state = 'On'
 		else:
 			state = 'Off'
-		line_string = '      ' + state
+		line_string = '      ' + state + '       '
 		return line_string
 	
 	def left(self):
@@ -244,17 +256,35 @@ class settingMenu:
 		elif settings[self.setting]['type'] == 1:
 			settings[self.setting]['value'] != settings[self.setting]['value']
 		else:
+			if time.time() - self.last_press <= 0.75:
+				self.presses += 1
+				if self.presses == 5 and self.step < 32:
+					self.step = self.step * 2
+			else:
+				self.presses = 0
+				self.step = 0.5
+			settings[self.setting]['value'] += self.step
+			settings[self.setting]['value'] = min([settings[self.setting]['value'], 1800])
+			self.last_press = time.time()
 			
 	def right(self):
 		if settings[self.setting]['type'] == 0:
 			settings[self.setting]['value'] += 1
-		elif settings[self.setting]['value'] == 1
+		elif settings[self.setting]['value'] == 1:
 			settings[self.setting]['value'] != settings[self.setting]['value']
 		else:
-			
+			if time.time() - self.last_press <= 0.75:
+				self.presses += 1
+				if self.presses == 5 and self.step < 32:
+					self.step = self.step * 2
+			else:
+				self.presses = 0
+				self.step = 0.5
+			settings[self.setting]['value'] -= self.step
+			settings[self.setting]['value'] = max([settings[self.setting]['value'], 0])
+			self.last_press = time.time()
 				 
 	def update(self):
-		clearLine(1)
 		lcd.cursor_pos = (1,0)
 		if settings[self.setting]['type'] == 0:
 			lcd.write_string(self.bar(settings[self.setting]['value']))
@@ -264,7 +294,7 @@ class settingMenu:
 			lcd.write_string(self.delay(settings[self.setting]['value']))
 		
 		
-				 
+
 LightB = button(20,21)
 ModeB_left = button(26)
 ModeB_right = button(19)
@@ -277,16 +307,15 @@ def buttons():
 			#do stuff
 		elif status1 == 2:
 			#do stuff
-		if settingMenu.setting != 4 and settingMenu.isOpen:
-			status2 = ModeB_left.readStatus()
-			if status2 == 1:
-				if setting_mode == True:
-					settingMenu.left()
-			elif status2 == 2:
-				if setting_mode == True:
-					settingMenu.prev()
-				else:
-					settingMenu.open()
+		status2 = ModeB_left.readStatus()
+		if status2 == 1:
+			if setting_mode == True:
+				settingMenu.left()
+		elif status2 == 2:
+			if setting_mode == True:
+				settingMenu.prev()
+			else:
+				settingMenu.open()
 		status3 = ModeB_right.readStatus()
 		if status3 == 1:
 			if setting_mode == True:
@@ -300,6 +329,7 @@ def buttons():
 		if status4 == 1:
 			if mute == False:
 				track.set_volume(0)
+				
 				mute = True
 			else:
 				track.set_volume(volume)
@@ -448,10 +478,12 @@ def displayInfo():	#Stelle Informationen zu der Mission auf LCD dar
 		oldTime = int(time.time())
 		display(mission, launchpad)	#Zeige für 10 Sekunden Art der Mission und Start
 
-def display(line1, line2):	#Stelle 2 Zeilen auf LCD Display dar. Scrolle falls nötig.
-	lcd.clear()
-	length = len(line1)
-	if len(line2) > length:	#Wie lang ist der längste String?
+def display(line1, line2, priority = 0, duration = 0):	#Stelle 2 Zeilen auf LCD Display dar. Scrolle falls nötig.
+	global lcd_showing
+	if priority >= lcd_showing:
+		lcd.clear()
+		length = len(line1)
+		if len(line2) > length:	#Wie lang ist der längste String?
 		length = len(line2)
 	if len(line1) <= 16:	#Schreib Zeile 1 auf LCD falls diese komplett passt (maximale Länge ist 16 Zeichen)
 		lcd.cursor_pos = (0,0)
