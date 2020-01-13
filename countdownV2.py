@@ -179,9 +179,9 @@ class button:
 		og_state = self.led_state
 		while og_state == self.led_state:
 			GPIO.output(self.led_pin, GPIO.HIGH)
-			time.sleep(frequency/2)
+			time.sleep(frequency)
 			GPIO.output(self.led_pin, GPIO.LOW)
-			time.sleep(frequency/2)
+			time.sleep(frequency)
 		self.setLed(self.led_state)
 		self.blinking = False
 
@@ -229,7 +229,7 @@ class settingMenu:
 		line_string = ''
 		for i in range(0,value):
 			line_string += char(255)
-		line_string = f'{line_string:16}
+		line_string = line_string.ljust(16)
 		return line_string
 	
 	def delay(self, value):
@@ -246,7 +246,7 @@ class settingMenu:
 			state = 'On'
 		else:
 			state = 'Off'
-		line_string = '      ' + state + '       '
+		line_string = state.center(16)
 		return line_string
 	
 	def left(self):
@@ -295,11 +295,11 @@ class settingMenu:
 class LCDwriter():
 	def __init__(self, lcd_obj):
 		self.lcd = lcd_obj
-		self.power = False
+		self.power = True
 		self.new = True
 		self.running = False
 		self.current_priority = 0
-		self.queue = ['', 0, '', 0, 0, 0]
+		self.queue = ['', 0, '', 0, -1, 0]
 		self.current_continous = ['', 0, '', 0, 0, 0]
 		self.showing = ['', 0, '', 0, 0, 0]
 		
@@ -320,53 +320,66 @@ class LCDwriter():
 	def setBrightness(self, brightness):
 	
 	def writerFunction(self):
-		while self.power == False:
-			if self.queue[5] >= self.showing[5]:
-				if self.showing[6] == 0:
+		while self.power == True:
+			if self.new == True and self.queue[4] >= self.showing[4] or self.queue[4] == -1:
+				if self.showing[5] == 0:
 					self.current_continous = self.showing.copy()
-				if self.queue[2] != 3:
+				if self.queue[1] != 3:
+					self.showing[0] = self.queue[0]
 					self.showing[1] = self.queue[1]
+				if self.queue[3] != 3:
 					self.showing[2] = self.queue[2]
-				if self.queue[4] != 3:
 					self.showing[3] = self.queue[3]
-					self.showing[4] = self.queue[4]
+				self.showing[4] = self.queue[4]
 				self.showing[5] = self.queue[5]
-				self.showing[6] = self.queue[6]
+				if self.queue[4] == -1:
+					self.showing = self.current_continous.copy()
+				
+				hold_time = time.time()
 				max_length = len(line1)
 				if len(line2) > max_length:	#Wie lang ist der längste String?
 				max_length = len(line2)
 				if len(line1) <= 16:	#Schreib Zeile 1 auf LCD falls diese komplett passt (maximale Länge ist 16 Zeichen)
 					lcd.cursor_pos = (0,0)
-					if self.showing[2] == 0:
-						print_line = self.showing[1].ljust(16)
-					elif self.showing[2] == 1:
-						print_line = self.showing[1].center(16)
+					if self.showing[1] == 0:
+						print_line = self.showing[0].ljust(16)
+					elif self.showing[1] == 1:
+						print_line = self.showing[0].center(16)
 					else:
-						print_line = self.showing[1].rjust(16)
+						print_line = self.showing[0].rjust(16)
 					lcd.write_string(print_line)
 				if len(line2) <= 16:	#Schreib Zeile 2 auf LCD falls diese komplett passt (maximale Länge ist 16 Zeichen)
 					lcd.cursor_pos = (1,0)
-					if self.showing[4] == 0:
-						print_line = self.showing[3].ljust(16)
-					elif self.showing[4] == 1:
-						print_line = self.showing[3].center(16)
+					if self.showing[3] == 0:
+						print_line = self.showing[2].ljust(16)
+					elif self.showing[3] == 1:
+						print_line = self.showing[2].center(16)
 					else:
-						print_line = self.showing[3].rjust(16)
+						print_line = self.showing[2].rjust(16)
 					lcd.write_string(print_line)
-				if length > 16:		#Falls eine Zeile länger als 16 Zeichen ist...
-					for i in range(max_length - 15):
+				
+				
+				if if max_length > 16 and i < max_length - 15 and i > -1:
+					if wait_until >= time.time():
+						wait_until = time.time()
 						if len(line1) > 16 and len(line1) >= i + 16:	#Falls Zeile 1 zu lang ist, scrolle diese
 							lcd.cursor_pos = (0,0)
 							lcd.write_string(line1[i:i+16])
 						if len(line2) > 16 and len(line2) >= i + 16:	#Falls Zeile 2 zu lang ist, scrolle diese
 							lcd.cursor_pos = (1,0)
 							lcd.write_string(line2[i:i+16])
-
 						if i == 0:	#Warte 1 Sekunde bevor gescrollt wird, scrolle anschließend mit 0,4 Sekunden/Zeichen
-							time.sleep(1)
+							wait_until += 1
 						else:
-							time.sleep(0.4)
-					time.sleep(1)
+							wait_until += 0.4
+						i += 1
+				else:
+					i = -1
+				
+				if self.showing[6] > 0:
+					while hold_time + self.showing[6] > time.time():
+						
+					if 
 
 LightB = button(20,21)
 ModeB_left = button(26)
@@ -447,6 +460,7 @@ def spotlightFadeout():	#Scheinwerfer werden langsam ausgeschaltet
 
 def updatethread():	#Startzeit der nächsten Rakete wird ständig aus dem Internet gelesen und aktualisiert
 	global launchtime
+	global launchid
 	global end
 	global data
 	last_check = 0
