@@ -23,29 +23,22 @@ from datetime import datetime
 import RPi.GPIO as GPIO
 from RPLCD import CharLCD
 from Adafruit_LED_Backpack import SevenSegment
-#deklariere alle benötigten globalen Variablen
+#deklariere benötigte globale Variablen und Objekte
+#TODO: weniger globale Variablen
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
 GPIO.setup(14,GPIO.OUT)
 GPIO.setup(17,GPIO.OUT)
 segment = SevenSegment.SevenSegment() #initialisiert Siebensegmentdisplay mit Standardadresse
 lcd = CharLCD(cols=16, rows=2, pin_rs=4, pin_e=17, pins_data=[18,22,23,24],numbering_mode = GPIO.BCM) #initialisiert LDC Display mit verwendeten Pins
-launchtime = 0 #Unixtimestamp des nächsten Starts
-launchid = 0
+launchtime = 0	#Unixtimestamp des nächsten Starts
+launchid = 0	#ID des aktuellen Starts in der Launchlibrary-Datenbank
 end = True #Wurde Start abgesagt/ ist Mission zuende? (egal ob erfolgreich oder nicht)
 phase = 0 #aktuelle Phase des Starts
 mode = True #True = clock, False = launch only
-volume = 0.5
-mute = False
-setting_mode = False
-settings = {
-	0: {'name':'   brightness   ', 'type': 0, 'value': 8},
-	1: {'name':'     volume     ', 'type': 0, 'value': 8},
-	2: {'name':'      delay     ', 'type': 2, 'value': 0},
-	3: {'name':'auto  brightness', 'type': 1, 'value': True}}
 data = {}
 colon = True #Zustand des Doppelpunktes auf dem 7 Segment Display
-engineLED = GPIO.PWM(14, 100) #Pin der Triebwerks-Leds
+engineLED = GPIO.PWM(14, 100) #Pin der Triebwerk-Leds
 spotLED = GPIO.PWM(18, 100) #Pin der Scheinwerfer-Leds
 GPIO.setup(15, GPIO.OUT)
 GPIO.output(15, GPIO.HIGH)
@@ -53,7 +46,8 @@ segment.begin()
 pygame.init()
 track = pygame.mixer.Sound('Rocket_Start_Track.wav')
 
-rocket11 = (
+# Benutzerdefinierte Zeichen für das LCD-Display, wenn in der richtigen Reihenfolge dargestellt ergeben diese eine Animation einer startenden Rakete
+rocket_char_0 = (
 	0b00100,
 	0b01010,
 	0b10001,
@@ -62,10 +56,8 @@ rocket11 = (
 	0b01010,
 	0b01010,
 	0b01010,)
-
-lcd.create_char(0,rocket11)
-
-rocket12 = (
+lcd.create_char(0,rocket_char_0)
+rocket_char_1 = (
 	0b01010,
 	0b01010,
 	0b01010,
@@ -74,10 +66,8 @@ rocket12 = (
 	0b11011,
 	0b11111,
 	0b10101,)
-
-lcd.create_char(1,rocket12)
-
-rocket21 = (
+lcd.create_char(1,rocket_char_1)
+rocket_char_2 = (
 	0b10001,
 	0b01010,
 	0b01010,
@@ -86,10 +76,8 @@ rocket21 = (
 	0b01010,
 	0b01010,
 	0b01010,)
-
-lcd.create_char(2,rocket21)
-
-rocket22 = (
+lcd.create_char(2,rocket_char_2)
+rocket_char_3 = (
 	0b11011,
 	0b11011,
 	0b11111,
@@ -98,10 +86,8 @@ rocket22 = (
 	0b01110,
 	0b01110,
 	0b11111,)
-
-lcd.create_char(3,rocket22)
-
-rocket32 = (
+lcd.create_char(3,rocket_char_3)
+rocket_char_4 = (
 	0b00100,
 	0b01110,
 	0b01110,
@@ -110,10 +96,8 @@ rocket32 = (
 	0b11111,
 	0b01110,
 	0b01010,)
-
-lcd.create_char(4,rocket32)
-
-rocket42 = (
+lcd.create_char(4,rocket_char_4)
+rocket_char_5 = (
 	0b11111,
 	0b11111,
 	0b01110,
@@ -122,20 +106,21 @@ rocket42 = (
 	0b00000,
 	0b00000,
 	0b00000,)
+lcd.create_char(5,rocket_char_5)
 
-lcd.create_char(5,rocket42)
-
-class button:
-	def __init__(self, pin, led_pin = 0, debounce = 0.05, long_press = 0.5):
+class button:	#Klasse für die Knöpfe im Gehäuse
+	def __init__(self, pin, short_func = None, long_func = None, led_pin = 0, debounce = 0.05, long_press = 0.5):
 		self.pin = pin
 		self.led_pin = led_pin
-		self.debounce = debounce
+		self.short_func = short_func
+		self.long_func = long_func
+		self.debounce = debo
 		self.long_press = long_press
 		self.state = 0
 		self.led_state = False
 		self.blinking = False
 		GPIO.setup(self.pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-		GPIO.add_event_detect(self.pin, GPIO.FALLING, callback=self.callbackEvent, bouncetime = 50)
+		GPIO.add_event_detect(self.pin, GPIO.FALLING, callback=self.callbackEvent, bouncetime = self.debounce * 1000)
 		if self.led_pin > 0:
 			GPIO.setup(self.led_pin, GPIO.OUT)
 			GPIO.output(self.led_pin, GPIO.LOW)
@@ -147,8 +132,12 @@ class button:
 		buttonTime = time.time() - start_time
 		if self.debounce <= buttonTime < self.long_press:
 			self.state = 1
+			if self.short_func is not None:
+				self.short_func()
 		elif self.long_press <= buttonTime:
 			self.state = 2
+			if self.long_func is not None:
+				self.long_func()
 
 	def readState(self):
 		og_state = self.state
@@ -172,10 +161,10 @@ class button:
 	def blinkLed(self, frequency):
 		if self.blinking == False:
 			self.blinking = True
-			blink = threading.Thread(target=self.blink_function, args=(frequency,), daemon = True)
+			blink = threading.Thread(target=self.blinkFunction, args=(frequency,), daemon = True)
 			blink.start()
 
-	def blink_function(self, frequency):
+	def blinkFunction(self, frequency):
 		og_state = self.led_state
 		while og_state == self.led_state:
 			GPIO.output(self.led_pin, GPIO.HIGH)
@@ -191,39 +180,56 @@ class settingMenu:
 		self.step = 0.5
 		self.presses = 0
 		self.last_press = 0
-	
+		self.audio_mute = False
+		self.active = False
+		self.settings_dict = {
+				0: {'name':'   brightness   ', 'type': 'bar', 'value': 8},
+				1: {'name':'     volume     ', 'type': 'bar', 'value': 8},
+				2: {'name':'      delay     ', 'type': 'timer', 'value': 0},
+				3: {'name':'auto  brightness', 'type': 'bool', 'value': True}}
+
 	def open(self):
-		global setting_mode
-		setting_mode = True
-		setting = 0
+		self.active = True
+		self.setting = 0
 		lcd.clear()
 		lcd.cursor_pos = (0,0)
-		lcd.write_string(settings[0]['name'])
-		lcd.cursor_pos = (1,0)
-		lcd.write_string(self.bar(0))
+		lcd.write_string(self.settings_dict[0]['name'])
+		if self.settings_dict[0]['type'] == 'bar':
+			lcd.write_string(self.bar(self.settings_dict[0]['value']))
+		elif self.settings_dict[0]['type'] == 'bool':
+			lcd.write_string(self.bool(self.settings_dict[0]['value']))
+		else
+			lcd.write_string(self.delay(self.settings[0]['value']))
 	
 	def showNew(self):
 		lcd.clear
 		lcd.cursor_pos = (0,0)
-		lcd.write_string(settings[self.setting]['name'])
+		lcd.write_string(self.settings_dict[self.setting]['name'])
 		lcd.cursor_pos = (1,0)
-		s_type = settings[self.setting]['type']
-		if  s_type == 0:
-			lcd.write_string(self.bar(settings[self.setting]['value']))
-		else:
-			lcd.write_string(self.delay(settings[self.setting]['value']))
+		if self.settings_dict[self.setting]['type'] == 'bar':
+			lcd.write_string(self.bar(self.settings_dict[self.setting]['value']))
+		elif self.settings_dict[self.setting]['type'] == 'bool':
+			lcd.write_string(self.bool(self.settings_dict[self.setting]['value']))
+		else
+			lcd.write_string(self.delay(self.settings_dict[self.setting]['value']))
 	
 	def next(self):
-		self.setting += 1
-		if self.setting = 3:
-			self.setting = 0
-		self.showNew()
+		if self.active:
+			self.setting += 1
+			if self.setting = 3:
+				self.setting = 0
+			self.showNew()
+		else:
+			self.open()
 	
 	def prev(self):
-		self.setting -= 1
-		if self.setting = -1:
-			self.setting = 2
-		self.showNew()
+		if self.active:
+			self.setting -= 1
+			if self.setting = -1:
+				self.setting = 2
+			self.showNew()
+		else:
+			self.open()
 			
 	def bar(self, value):
 		line_string = ''
@@ -233,10 +239,10 @@ class settingMenu:
 		return line_string
 	
 	def delay(self, value):
-		minutes = int((settings[self.setting]['value']/60)%60)
-		seconds = int(settings[self.setting]['value'] % 60)
+		minutes = int((self.settings_dict[self.setting]['value']/60)%60)
+		seconds = int(self.settings_dict[self.setting]['value'] % 60)
 		halves = '0'
-		if settings[self.setting]['value'].is_integrer:
+		if self.settings_dict[self.setting]['value'].is_integrer:
 			halves = '5'
 		line_string = '    %02d:%02d.%s' % (minutes, seconds, halves)
 		return line_string
@@ -250,48 +256,69 @@ class settingMenu:
 		return line_string
 	
 	def left(self):
-		if settings[self.setting]['type'] == 0:
-			settings[self.setting]['value'] -= 1
-		elif settings[self.setting]['type'] == 1:
-			settings[self.setting]['value'] != settings[self.setting]['value']
-		else:
-			if time.time() - self.last_press <= 0.75:
-				self.presses += 1
-				if self.presses == 5 and self.step < 32:
-					self.step = self.step * 2
-			else:
-				self.presses = 0
-				self.step = 0.5
-			settings[self.setting]['value'] += self.step
-			settings[self.setting]['value'] = min([settings[self.setting]['value'], 1800])
-			self.last_press = time.time()
+		if self.active:
+			if self.settings_dict[self.setting]['type'] == 0:
+				self.settings_dict[self.setting]['value'] -= 1
+			elif self.settings_dict[self.setting]['type'] == 1:
+				self.settings_dict[self.setting]['value'] != self.settings_dict[self.setting]['value']
+			else:	#Verändern der Verzögerung, Änderung per Knopfdruck steigt wenn dieser schnell gedrückt wird
+				if time.time() - self.last_press <= 0.75:
+					self.presses += 1
+					if self.presses == 5 and self.step < 32:
+						self.step = self.step * 2
+				else:
+					self.presses = 0
+					self.step = 0.5
+				self.settings_dict[self.setting]['value'] += self.step
+				self.settings_dict[self.setting]['value'] = min(self.settings_dict[self.setting]['value'], 1800])
+				self.last_press = time.time()
 			
 	def right(self):
-		if settings[self.setting]['type'] == 0:
-			settings[self.setting]['value'] += 1
-		elif settings[self.setting]['value'] == 1:
-			settings[self.setting]['value'] != settings[self.setting]['value']
-		else:
-			if time.time() - self.last_press <= 0.75:
-				self.presses += 1
-				if self.presses == 5 and self.step < 32:
-					self.step = self.step * 2
+		if self.active:
+			if self.settings_dict[self.setting]['type'] == 0:
+				self.settings_dict[self.setting]['value'] += 1
+			elif self.settings_dict[self.setting]['value'] == 1:
+				self.settings_dict[self.setting]['value'] != self.settings_dict[self.setting]['value']
 			else:
-				self.presses = 0
-				self.step = 0.5
-			settings[self.setting]['value'] -= self.step
-			settings[self.setting]['value'] = max([settings[self.setting]['value'], 0])
-			self.last_press = time.time()
+				if time.time() - self.last_press <= 0.75:
+					self.presses += 1
+					if self.presses == 5 and self.step < 32:
+						self.step = self.step * 2
+				else:
+					self.presses = 0
+					self.step = 0.5
+				self.settings_dict[self.setting]['value'] -= self.step
+				self.settings_dict[self.setting]['value'] = max(self.settings_dict[self.setting]['value'], 0])
+				self.last_press = time.time()
 				 
 	def update(self):
 		lcd.cursor_pos = (1,0)
-		if settings[self.setting]['type'] == 0:
-			lcd.write_string(self.bar(settings[self.setting]['value']))
-		elif settings[self.setting]['type'] == 1:
-			lcd.write_string(self.bool(settings[self.setting]['value']))
+		if self.settings_dict[self.setting]['type'] == 0:
+			lcd.write_string(self.bar(self.settings_dict[self.setting]['value']))
+		elif self.settings_dict[self.setting]['type'] == 1:
+			lcd.write_string(self.bool(self.settings_dict[self.setting]['value']))
 		else
-			lcd.write_string(self.delay(settings[self.setting]['value']))
-		
+			lcd.write_string(self.delay(self.settings_dict[self.setting]['value']))
+	
+	def shutdown(self):
+		phase = 0
+		end = True
+		time.sleep(2)	#Damit alle Threads beendet sind
+		segment.clear()
+		lcd.clear()
+		lcd.cursor_pos = (0,0)
+		lcd.write_string("     Goodbye")
+		time.sleep(2)
+		subprocess.call(['shutdown', '-h', 'now'], shell=False)
+
+	def mute(self):
+		if self.audio_mute == False:
+			track.set_volume(0)
+			self.audio_mute = True
+		else:
+			track.set_volume(self.settings_dict[1]['value'])
+			self.audio_mute  = False
+
 class LCDwriter():
 	def __init__(self, lcd_obj):
 		self.lcd = lcd_obj
@@ -381,55 +408,11 @@ class LCDwriter():
 						
 					if 
 
-LightB = button(20,21)
-ModeB_left = button(26)
-ModeB_right = button(19)
-PowerB = button(16)
+LightB = button(20, led_pin = 21)
+ModeB_left = button(26, settingMenu.left, settingMenu.next)
+ModeB_right = button(19, settingMenu.right, settingMenu.prev)
+PowerB = button(16, settingMenu.mute, settingMenu.shutdown)
 
-def buttons():
-	while True:
-		status1 = LightB.readStatus()
-		if status1 == 1:
-			#do stuff
-		elif status1 == 2:
-			#do stuff
-		status2 = ModeB_left.readStatus()
-		if status2 == 1:
-			if setting_mode == True:
-				settingMenu.left()
-		elif status2 == 2:
-			if setting_mode == True:
-				settingMenu.prev()
-			else:
-				settingMenu.open()
-		status3 = ModeB_right.readStatus()
-		if status3 == 1:
-			if setting_mode == True:
-				settingMenu.right()
-		elif status3 == 2:
-			if setting_mode == True:
-				settingMenu.next()
-			else:
-				settingMenu.open()
-		status4 = PowerB.readStatus()
-		if status4 == 1:
-			if mute == False:
-				track.set_volume(0)
-				
-				mute = True
-			else:
-				track.set_volume(volume)
-				mute  = False
-		elif status4 == 2:
-			phase = 0
-			end = True
-			time.sleep(2)	#Damit alle Threads beendet sind
-			segment.clear()
-			lcd.clear()
-			lcd.cursor_pos = (0,0)
-			lcd.write_string("     Goodbye")
-			time.sleep(2)
-			subprocess.call(['shutdown', '-h', 'now'], shell=False)
 
 def rocketengines():	#Flackern der Leds in den Triebwerken
 	engineLED.start(0)
@@ -470,7 +453,7 @@ def updatethread():	#Startzeit der nächsten Rakete wird ständig aus dem Intern
 			if launchtime - time.time() >= 0 or launchtime - time.time() < -3598:
 				r = requests.get("https://launchlibrary.net/1.4.2/launch/next/1")	#Anfrage an Web-API, erhält JSON-Datei zurück
 			else:
-				r = requests.get("https://launchlibrary.net/1.4.2/launch/" + str(launchid))
+				r = requests.get("https://launchlibrary.net/1.4.2/launch/" + str(launchid)) #Die Start-Reihenfolge der API rückt schnell nach dem Start aus, durch das Verwenden der ID wird verhindert, dass der nächste Start abgefragt wird während der Alte noch läuft.
 			data = r.json() #Wandel JSON in dictionary um
 			launchid = (data["launches"][0]["id"])
 			status = (data["launches"][0]["status"])	#Auslesen des Status des nächsten Starts
@@ -501,8 +484,6 @@ def updatethread():	#Startzeit der nächsten Rakete wird ständig aus dem Intern
 				phase = 0
 			if end = True:
 				phase = 0
-				
-			buttons()
 
 def isPhase6(status):
 	if status == 3 and phase > 0:		#Status 3 = Start erfolgreich
@@ -554,13 +535,13 @@ def displayInfo():	#Stelle Informationen zu der Mission auf LCD dar
 	while phase >= 1:
 		while int(time.time()) < (oldTime+10):
 			time.sleep(0.1)
-			while setting_mode == True:
+			while settingMode.showing == True:
 				time.sleep(0.1)
 		oldTime = int(time.time())
 		display(name, lsp)	#Zeige für 10 Sekunden Name der Rakete & Mission und Launch Service Provider
 		while int(time.time()) < (oldTime+10):
 			time.sleep(0.1)
-			while setting_mode == True:
+			while settingMode.showing == True:
 				time.sleep(0.1)
 		oldTime = int(time.time())
 		display(mission, launchpad)	#Zeige für 10 Sekunden Art der Mission und Start
