@@ -114,7 +114,7 @@ class button:	#Klasse für die Knöpfe im Gehäuse
 		self.led_pin = led_pin
 		self.short_func = short_func
 		self.long_func = long_func
-		self.debounce = debo
+		self.debounce = debounce
 		self.long_press = long_press
 		self.state = 0
 		self.led_state = False
@@ -175,19 +175,14 @@ class button:	#Klasse für die Knöpfe im Gehäuse
 		self.blinking = False
 
 class settingMenu:
-	def __init__(self):
+	def __init__(self, settings_dict = {}):
 		self.setting = 0
 		self.step = 0.5
 		self.presses = 0
 		self.last_press = 0
 		self.audio_mute = False
 		self.active = False
-		self.settings_dict = {
-				0: {'name':'   brightness   ', 'type': 'bar', 'value': 8},
-				1: {'name':'     volume     ', 'type': 'bar', 'value': 8},
-				2: {'name':'      delay     ', 'type': 'timer', 'value': 0},
-				3: {'name':'auto  brightness', 'type': 'bool', 'value': True}}
-
+		self.settings_dict = settings_dict
 	def open(self):
 		self.active = True
 		self.setting = 0
@@ -408,10 +403,13 @@ class LCDwriter():
 						
 					if 
 
+settingController = settingMenu({0: {'name':'brightness', 'type': 'bar',   'value': 8},
+				 1: {'name':'volume', 	  'type': 'bar',   'value': 8},
+				 2: {'name':'delay', 	  'type': 'timer', 'value': 0}})
 LightB = button(20, led_pin = 21)
-ModeB_left = button(26, settingMenu.left, settingMenu.next)
-ModeB_right = button(19, settingMenu.right, settingMenu.prev)
-PowerB = button(16, settingMenu.mute, settingMenu.shutdown)
+ModeB_left = button(26, settingController.left, settingController.next)
+ModeB_right = button(19, settingController.right, settingController.prev)
+PowerB = button(16, settingController.mute, settingController.shutdown)
 
 
 def rocketengines():	#Flackern der Leds in den Triebwerken
