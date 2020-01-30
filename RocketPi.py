@@ -320,10 +320,9 @@ class LCDwriter():
 		self.power = True
 		self.new = True
 		self.running = False
-		self.current_priority = 0
-		self.queue = ['', 0, '', 0, -1, 0]
-		self.current_continous = ['', 0, '', 0, 0, 0]
-		self.showing = ['', 0, '', 0, 0, 0]
+		self.queue = {'line1':'', 'format_line1':0, 'line2':'', 'format_line2':0, 'priority':-1, 'duration':0}
+		self.current_continous = {'line1':'', 'format_line1':0, 'line2':'', 'format_line2':0, 'priority':0, 'duration':0}
+		self.showing = {'line1':'', 'format_line1':0, 'line2':'', 'format_line2':0, 'priority':0, 'duration':0}
 		
 	def startWriter(self):
 		if self.running == False:
@@ -340,15 +339,16 @@ class LCDwriter():
 		self.power = state
 		
 	def setBrightness(self, brightness):
+		#analogen Output auf Wert setzen (16 Stufen)
 	
 	def writerFunction(self):
 		while self.power == True:
-			if self.new == True and self.queue[4] >= self.showing[4] or self.queue[4] == -1:
-				if self.showing[5] == 0:
+			if self.new == True and self.queue['priority'] >= self.showing['priority'] or self.queue['priority'] == -1:
+				if self.showing['duration'] == 0:
 					self.current_continous = self.showing.copy()
-				if self.queue[1] != 3:
-					self.showing[0] = self.queue[0]
-					self.showing[1] = self.queue[1]
+				if self.queue['line1'] != 3:
+					self.showing['line1'] = self.queue['line1']
+					self.showing['format_line1'] = self.queue['format_line1']
 				if self.queue[3] != 3:
 					self.showing[2] = self.queue[2]
 					self.showing[3] = self.queue[3]
@@ -369,7 +369,7 @@ class LCDwriter():
 						print_line = self.showing[0].center(16)
 					else:
 						print_line = self.showing[0].rjust(16)
-					lcd.write_string(print_line)
+					self.lcd.write_string(print_line)
 				if len(line2) <= 16:	#Schreib Zeile 2 auf LCD falls diese komplett passt (maximale Länge ist 16 Zeichen)
 					lcd.cursor_pos = (1,0)
 					if self.showing[3] == 0:
@@ -378,18 +378,18 @@ class LCDwriter():
 						print_line = self.showing[2].center(16)
 					else:
 						print_line = self.showing[2].rjust(16)
-					lcd.write_string(print_line)
+					self.lcd.write_string(print_line)
 				
 				
 				if if max_length > 16 and i < max_length - 15 and i > -1:
 					if wait_until >= time.time():
 						wait_until = time.time()
 						if len(line1) > 16 and len(line1) >= i + 16:	#Falls Zeile 1 zu lang ist, scrolle diese
-							lcd.cursor_pos = (0,0)
-							lcd.write_string(line1[i:i+16])
+							self.lcd.cursor_pos = (0,0)
+							self.lcd.write_string(line1[i:i+16])
 						if len(line2) > 16 and len(line2) >= i + 16:	#Falls Zeile 2 zu lang ist, scrolle diese
-							lcd.cursor_pos = (1,0)
-							lcd.write_string(line2[i:i+16])
+							self.lcd.cursor_pos = (1,0)
+							self.lcd.write_string(line2[i:i+16])
 						if i == 0:	#Warte 1 Sekunde bevor gescrollt wird, scrolle anschließend mit 0,4 Sekunden/Zeichen
 							wait_until += 1
 						else:
