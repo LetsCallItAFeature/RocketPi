@@ -317,91 +317,110 @@ class settingMenu:
 class LCDwriter():
 	def __init__(self, lcd_obj):
 		self.lcd = lcd_obj
-		self.power = True
 		self.new = True
 		self.running = False
-		self.queue = {'line1':'', 'format_line1':0, 'line2':'', 'format_line2':0, 'priority':-1, 'duration':0}
-		self.current_continous = {'line1':'', 'format_line1':0, 'line2':'', 'format_line2':0, 'priority':0, 'duration':0}
-		self.showing = {'line1':'', 'format_line1':0, 'line2':'', 'format_line2':0, 'priority':0, 'duration':0}
+		self.queue = {'line1':'', 'format_line1':'left', 'line2':'', 'format_line2':'left', 'priority':0, 'duration':0}
+		self.current_continous = {'line1':'', 'format_line1':'left', 'line2':'', 'format_line2':'left', 'priority':0, 'duration':0}
+		self.showing = {'line1':'', 'format_line1':'left', 'line2':'', 'format_line2':'left', 'priority':0, 'duration':0}
 		
-	def startWriter(self):
+	def startWriter(self):	#muss nicht extra aufgerufen werden, wird auch durch .write() ausgelöst
 		if self.running == False:
 			self.running = True
 			writer = threading.Thread(target=self.writerFunction, daemon = True)
 			writer.start()
 			
-	def write(self, line1, format_line1 = 0, line2, format_line2 = 0, priority = 0, duration = 0):
-		self.queue = [line1, format_line1, line2, format_line2, priority, duration]
+	def write(self, line1, format_line1 = 'left', line2, format_line2 = 'left', priority = 0, duration = 0): #format-Werte: 'left', 'center', 'right', 'SAME_AS_LAST'
+		self.queue['line1'] = line1
+		self.queue['format_line1'] = format_line1
+		self.queue['line2'] = line2
+		self.queue['format_line2'] = format_line2
+		self.queue['priority'] = priority
+		self.queue['duration'] = duration
 		self.new = True
 		self.startWriter()
 		
-	def setPower(self, state):
-		self.power = state
+	def shutdown(self):
+		self.running = False
 		
 	def setBrightness(self, brightness):
 		#analogen Output auf Wert setzen (16 Stufen)
 	
 	def writerFunction(self):
-		while self.power == True:
-			if self.new == True and self.queue['priority'] >= self.showing['priority'] or self.queue['priority'] == -1:
+		while self.running == True:
+			if self.new == True and self.queue['priority'] >= self.showing['priority']:
 				if self.showing['duration'] == 0:
-					self.current_continous = self.showing.copy()
-				if self.queue['line1'] != 3:
-					self.showing['line1'] = self.queue['line1']
-					self.showing['format_line1'] = self.queue['format_line1']
-				if self.queue[3] != 3:
-					self.showing[2] = self.queue[2]
-					self.showing[3] = self.queue[3]
-				self.showing[4] = self.queue[4]
-				self.showing[5] = self.queue[5]
-				if self.queue[4] == -1:
-					self.showing = self.current_continous.copy()
-				
-				hold_time = time.time()
-				max_length = len(line1)
-				if len(line2) > max_length:	#Wie lang ist der längste String?
-				max_length = len(line2)
-				if len(line1) <= 16:	#Schreib Zeile 1 auf LCD falls diese komplett passt (maximale Länge ist 16 Zeichen)
-					lcd.cursor_pos = (0,0)
-					if self.showing[1] == 0:
-						print_line = self.showing[0].ljust(16)
-					elif self.showing[1] == 1:
-						print_line = self.showing[0].center(16)
-					else:
-						print_line = self.showing[0].rjust(16)
-					self.lcd.write_string(print_line)
-				if len(line2) <= 16:	#Schreib Zeile 2 auf LCD falls diese komplett passt (maximale Länge ist 16 Zeichen)
-					lcd.cursor_pos = (1,0)
-					if self.showing[3] == 0:
-						print_line = self.showing[2].ljust(16)
-					elif self.showing[3] == 1:
-						print_line = self.showing[2].center(16)
-					else:
-						print_line = self.showing[2].rjust(16)
-					self.lcd.write_string(print_line)
-				
-				
-				if if max_length > 16 and i < max_length - 15 and i > -1:
-					if wait_until >= time.time():
-						wait_until = time.time()
-						if len(line1) > 16 and len(line1) >= i + 16:	#Falls Zeile 1 zu lang ist, scrolle diese
-							self.lcd.cursor_pos = (0,0)
-							self.lcd.write_string(line1[i:i+16])
-						if len(line2) > 16 and len(line2) >= i + 16:	#Falls Zeile 2 zu lang ist, scrolle diese
-							self.lcd.cursor_pos = (1,0)
-							self.lcd.write_string(line2[i:i+16])
-						if i == 0:	#Warte 1 Sekunde bevor gescrollt wird, scrolle anschließend mit 0,4 Sekunden/Zeichen
-							wait_until += 1
-						else:
-							wait_until += 0.4
-						i += 1
+					self.current_continous = self.updateDictWith(self.current_continous, self.showing)
+				self.showing = self.updateDictWith(self.showing, self.queue)
+				time_shown = time.time()
+			elif self.showing['duration'] > 0 and time.time() - time_shown > self.showing['duration']:
+				if self.new == True:
+					self.showing = self.updateDictWith(self.showing, self.queue)
 				else:
-					i = -1
+					self.showing = self.updateDictWith(self.showing, self.current_continous)
+				time_shown = time.time()
+			
+			if self.new == True:
+				self.new = False
+				i = 0
+				hold_time = time.time()
+				max_length = len(self.showing['line1'])
+				if len(self.showing['line2']) > max_length:	#Wie lang ist der längste String?
+				max_length = len(self.showing['line2'])
+				if len(self.showing['line1']) <= 16:	#Schreib Zeile 1 auf LCD falls diese komplett passt (maximale Länge ist 16 Zeichen)
+					if self.showing['format_line1'] == 'left':
+						print_line = self.showing['line1'].ljust(16)
+					elif self.showing['format_line1'] == 'center':
+						print_line = self.showing['line1'].center(16)
+					else:
+						print_line = self.showing['line1'].rjust(16)
+					self.lcd.cursor_pos = (0,0)
+					self.lcd.write_string(print_line)
+				if len(self.showing['line2']) <= 16:	#Schreib Zeile 2 auf LCD falls diese komplett passt (maximale Länge ist 16 Zeichen)
+					if self.showing['format_line2'] == 'left':
+						print_line = self.showing['line2'].ljust(16)
+					elif self.showing['format_line2'] == 'center':
+						print_line = self.showing['line2'].center(16)
+					else:
+						print_line = self.showing['line2'].rjust(16)
+					self.lcd.cursor_pos = (1,0)
+					self.lcd.write_string(print_line)
+
+			if max_length > 16 and i < max_length - 15:
+				wait_until = time.time()
+				if len(self.showing['line1']) > 16 and len(self.showing['line1']) >= i + 16:	#Falls Zeile 1 zu lang ist, scrolle diese
+					self.lcd.cursor_pos = (0,0)
+					self.lcd.write_string(self.showing['line1'][i:i+16])
+				if len(self.showing['line2']) > 16 and len(self.showing['line2']) >= i + 16:	#Falls Zeile 2 zu lang ist, scrolle diese
+					self.lcd.cursor_pos = (1,0)
+					self.lcd.write_string(self.showing['line2'][i:i+16])
+				if i == 0:	#Warte 1 Sekunde bevor gescrollt wird, scrolle anschließend mit 0,4 Sekunden/Zeichen
+					wait_until = time.time() + 1
+				else:
+					wait_until = time.time() + 0.4
+				while wait_until <= time.time():
+					if self.new == True:
+						break
+					time.sleep(0.1)
+				i += 1
+
 				
 				if self.showing[6] > 0:
 					while hold_time + self.showing[6] > time.time():
 						
 					if 
+					
+					
+	def updateDictWith(self, to_change, new_values):	#Zeileninhalte und Formatierungen werden, falls in der neuen Formatierung so angegeben, nicht verändert
+		if new_values['format_line1'] != 'SAME_AS_LAST':
+			to_change['line1'] = new_values['line1']
+			to_change['format_line1'] = new_values['format_line1']
+		if new_values['format_line2'] != 'SAME_AS_LAST':
+			to_change['line2'] = new_values['line2']
+			to_change['format_line2'] = new_values['format_line2']
+		to_change['priority'] = new_values['priority']
+		to_change['duration'] = new_values['duration']
+		return to_change
+
 
 settingController = settingMenu({0: {'name':'brightness', 'type': 'bar',   'value': 8},
 				 1: {'name':'volume', 	  'type': 'bar',   'value': 8},
