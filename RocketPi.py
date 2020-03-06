@@ -30,7 +30,6 @@ GPIO.setwarnings(False)
 GPIO.setup(14,GPIO.OUT)
 GPIO.setup(17,GPIO.OUT)
 segment = SevenSegment.SevenSegment() #initialisiert Siebensegmentdisplay mit Standardadresse
-lcd = CharLCD(cols=16, rows=2, pin_rs=4, pin_e=17, pins_data=[18,22,23,24],numbering_mode = GPIO.BCM) #initialisiert LDC Display mit verwendeten Pins
 launchtime = 0	#Unixtimestamp des nächsten Starts
 launchid = 0	#ID des aktuellen Starts in der Launchlibrary-Datenbank
 end = True #Wurde Start abgesagt/ ist Mission zuende? (egal ob erfolgreich oder nicht)
@@ -320,7 +319,7 @@ class LCDwriter():
 		self.new = True
 		self.running = False
 		self.queue = {'line1':'', 'format_line1':'left', 'line2':'', 'format_line2':'left', 'priority':0, 'duration':0}
-		self.current_continous = {'line1':'', 'format_line1':'left', 'line2':'', 'format_line2':'left', 'priority':0, 'duration':0}
+		self.background = {'line1':'', 'format_line1':'left', 'line2':'', 'format_line2':'left', 'priority':0, 'duration':0}
 		self.showing = {'line1':'', 'format_line1':'left', 'line2':'', 'format_line2':'left', 'priority':0, 'duration':0}
 		
 	def startWriter(self):	#muss nicht extra aufgerufen werden, wird auch durch .write() ausgelöst
@@ -329,7 +328,7 @@ class LCDwriter():
 			writer = threading.Thread(target=self.writerFunction, daemon = True)
 			writer.start()
 			
-	def write(self, line1, format_line1 = 'left', line2, format_line2 = 'left', priority = 0, duration = 0): #format-Werte: 'left', 'center', 'right', 'SAME_AS_LAST'
+	def write(self, line1 = 'SAME_AS_LAST', format_line1 = 'left', line2 = 'SAME_AS_LAST', format_line2 = 'left', priority = 0, duration = 0): #Format-Werte: 'left', 'center', 'right'
 		self.queue['line1'] = line1
 		self.queue['format_line1'] = format_line1
 		self.queue['line2'] = line2
@@ -339,7 +338,7 @@ class LCDwriter():
 		self.new = True
 		self.startWriter()
 		
-	def shutdown(self):
+	def stopWriter(self):
 		self.running = False
 		
 	def setBrightness(self, brightness):
@@ -347,25 +346,26 @@ class LCDwriter():
 	
 	def writerFunction(self):
 		while self.running == True:
-			if self.new == True and self.queue['priority'] >= self.showing['priority']:
+			if self.new == True and self.queue['priority'] >= self.showing['priority']: #neuer Inhalt mit höherer Priorität wird sofort angezeigt
 				if self.showing['duration'] == 0:
-					self.current_continous = self.updateDictWith(self.current_continous, self.showing)
+					self.background = self.updateDictWith(self.background, self.showing)
 				self.showing = self.updateDictWith(self.showing, self.queue)
 				time_shown = time.time()
 			elif self.showing['duration'] > 0 and time.time() - time_shown > self.showing['duration']:
 				if self.new == True:
-					self.showing = self.updateDictWith(self.showing, self.queue)
+					self.showing = self.updateDictWith(self.showing, self.queue) #neuer Inhalt mit niederiger Priorität wird erst nach dem Ende des bisherigen Inhaltes angezeigt
 				else:
-					self.showing = self.updateDictWith(self.showing, self.current_continous)
+					self.showing = self.updateDictWith(self.showing, self.background) #Ist die Zeit für den Inhalt vorbei und es gibt keinen Neuen, wird der 'Hintergrund' Inhalt gezeigt
+					self.new = True
 				time_shown = time.time()
 			
 			if self.new == True:
 				self.new = False
 				i = 0
-				hold_time = time.time()
+				time_this_loop = time.time()
 				max_length = len(self.showing['line1'])
 				if len(self.showing['line2']) > max_length:	#Wie lang ist der längste String?
-				max_length = len(self.showing['line2'])
+					max_length = len(self.showing['line2'])
 				if len(self.showing['line1']) <= 16:	#Schreib Zeile 1 auf LCD falls diese komplett passt (maximale Länge ist 16 Zeichen)
 					if self.showing['format_line1'] == 'left':
 						print_line = self.showing['line1'].ljust(16)
@@ -384,37 +384,41 @@ class LCDwriter():
 						print_line = self.showing['line2'].rjust(16)
 					self.lcd.cursor_pos = (1,0)
 					self.lcd.write_string(print_line)
-
-			if max_length > 16 and i < max_length - 15:
-				wait_until = time.time()
-				if len(self.showing['line1']) > 16 and len(self.showing['line1']) >= i + 16:	#Falls Zeile 1 zu lang ist, scrolle diese
-					self.lcd.cursor_pos = (0,0)
-					self.lcd.write_string(self.showing['line1'][i:i+16])
-				if len(self.showing['line2']) > 16 and len(self.showing['line2']) >= i + 16:	#Falls Zeile 2 zu lang ist, scrolle diese
-					self.lcd.cursor_pos = (1,0)
-					self.lcd.write_string(self.showing['line2'][i:i+16])
-				if i == 0:	#Warte 1 Sekunde bevor gescrollt wird, scrolle anschließend mit 0,4 Sekunden/Zeichen
-					wait_until = time.time() + 1
-				else:
-					wait_until = time.time() + 0.4
-				while wait_until <= time.time():
-					if self.new == True:
-						break
-					time.sleep(0.1)
-				i += 1
-
-				
-				if self.showing[6] > 0:
-					while hold_time + self.showing[6] > time.time():
-						
-					if 
+				if max_length > 16:
+					if self.showing['duration'] > 0:
+						char_time = (self.showing['duration'] - 1) / (max_length - 16) #berechnet Scrolling-Geschwindigkeit
+					elif self.showing['duration'] == -1:
+						char_time = 0.4
+						self.showing['duration'] = (max_length - 16) * 0.4 + 1 #berechnet Anzeige-Dauer bei gegebner Scrolling-Geschwindigkeit
+					else:
+				elif self.showing['duration'] == -1:
+					self.showing['duration'] = 5
+					
+			if max_length > 16:
+				if max_length < i + 16 and (time.time() - time_shown) + (time.time() - time_this_loop) < self.showing['duration']:
+					i = 0
+				if i < max_length - 15:
+					wait_until = time.time()
+					if len(self.showing['line1']) > 16 and len(self.showing['line1']) >= i + 16:	#Falls Zeile 1 zu lang ist, scrolle diese
+						self.lcd.cursor_pos = (0,0)
+						self.lcd.write_string(self.showing['line1'][i:i+16])
+					if len(self.showing['line2']) > 16 and len(self.showing['line2']) >= i + 16:	#Falls Zeile 2 zu lang ist, scrolle diese
+						self.lcd.cursor_pos = (1,0)
+						self.lcd.write_string(self.showing['line2'][i:i+16])
+					if i == 0 or i == max_length - 14:	#Warte 1 Sekunde bevor gescrollt wird
+						wait_until = time.time() + 1
+					else:
+						wait_until = time.time() + char_time
+					while wait_until <= time.time() and self.new == False:
+						time.sleep(0.1)
+					i += 1
 					
 					
-	def updateDictWith(self, to_change, new_values):	#Zeileninhalte und Formatierungen werden, falls in der neuen Formatierung so angegeben, nicht verändert
-		if new_values['format_line1'] != 'SAME_AS_LAST':
+	def updateDictWith(self, to_change, new_values):	#Zeileninhalte und Formatierungen der Zeile werden, falls 'SAME_AS_LAST' als Text angegeben ist, nicht verändert
+		if new_values['line1'] != 'SAME_AS_LAST':
 			to_change['line1'] = new_values['line1']
 			to_change['format_line1'] = new_values['format_line1']
-		if new_values['format_line2'] != 'SAME_AS_LAST':
+		if new_values['line2'] != 'SAME_AS_LAST':
 			to_change['line2'] = new_values['line2']
 			to_change['format_line2'] = new_values['format_line2']
 		to_change['priority'] = new_values['priority']
@@ -425,6 +429,7 @@ class LCDwriter():
 settingController = settingMenu({0: {'name':'brightness', 'type': 'bar',   'value': 8},
 				 1: {'name':'volume', 	  'type': 'bar',   'value': 8},
 				 2: {'name':'delay', 	  'type': 'timer', 'value': 0}})
+lcdController = LCDwriter(CharLCD(cols=16, rows=2, pin_rs=4, pin_e=17, pins_data=[18,22,23,24],numbering_mode = GPIO.BCM))
 LightB = button(20, led_pin = 21)
 ModeB_left = button(26, settingController.left, settingController.next)
 ModeB_right = button(19, settingController.right, settingController.prev)
