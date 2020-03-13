@@ -34,6 +34,7 @@ launchtime = 0	#Unixtimestamp des nächsten Starts
 launchid = 0	#ID des aktuellen Starts in der Launchlibrary-Datenbank
 end = True #Wurde Start abgesagt/ ist Mission zuende? (egal ob erfolgreich oder nicht)
 phase = 0 #aktuelle Phase des Starts
+shutdown_flag = False
 mode = True #True = clock, False = launch only
 data = {}
 colon = True #Zustand des Doppelpunktes auf dem 7 Segment Display
@@ -165,7 +166,7 @@ class button:	#Klasse für die Knöpfe im Gehäuse
 
 	def blinkFunction(self, frequency):
 		og_state = self.led_state
-		while og_state == self.led_state:
+		while og_state == self.led_state and shutdown_flag == False:
 			GPIO.output(self.led_pin, GPIO.HIGH)
 			time.sleep(frequency)
 			GPIO.output(self.led_pin, GPIO.LOW)
@@ -185,27 +186,22 @@ class settingMenu:
 	def open(self):
 		self.active = True
 		self.setting = 0
-		lcd.clear()
-		lcd.cursor_pos = (0,0)
-		lcd.write_string(self.settings_dict[0]['name'])
 		if self.settings_dict[0]['type'] == 'bar':
-			lcd.write_string(self.bar(self.settings_dict[0]['value']))
+			text = self.bar(self.settings_dict[0]['value'])
 		elif self.settings_dict[0]['type'] == 'bool':
-			lcd.write_string(self.bool(self.settings_dict[0]['value']))
-		else
-			lcd.write_string(self.delay(self.settings[0]['value']))
-	
+			text = self.bool(self.settings_dict[0]['value'])
+		else:
+			text = self.delay(self.settings[0]['value'])
+		LCD.write(self.settings_dict[0]['name'], 'center', text, 'left', 2, 10)
+		
 	def showNew(self):
-		lcd.clear
-		lcd.cursor_pos = (0,0)
-		lcd.write_string(self.settings_dict[self.setting]['name'])
-		lcd.cursor_pos = (1,0)
 		if self.settings_dict[self.setting]['type'] == 'bar':
-			lcd.write_string(self.bar(self.settings_dict[self.setting]['value']))
+			text = self.bar(self.settings_dict[self.setting]['value'])
 		elif self.settings_dict[self.setting]['type'] == 'bool':
-			lcd.write_string(self.bool(self.settings_dict[self.setting]['value']))
+			text = self.bool(self.settings_dict[self.setting]['value'])
 		else
-			lcd.write_string(self.delay(self.settings_dict[self.setting]['value']))
+			text = self.delay(self.settings_dict[self.setting]['value'])
+		LCD.write(self.settings_dict[self.setting]['name'], 'center', text, 'left', 2, 10)
 	
 	def next(self):
 		if self.active:
@@ -286,23 +282,23 @@ class settingMenu:
 				self.last_press = time.time()
 				 
 	def update(self):
-		lcd.cursor_pos = (1,0)
 		if self.settings_dict[self.setting]['type'] == 0:
-			lcd.write_string(self.bar(self.settings_dict[self.setting]['value']))
+			text = self.bar(self.settings_dict[self.setting]['value'])
 		elif self.settings_dict[self.setting]['type'] == 1:
-			lcd.write_string(self.bool(self.settings_dict[self.setting]['value']))
+			text = self.bool(self.settings_dict[self.setting]['value'])
 		else
-			lcd.write_string(self.delay(self.settings_dict[self.setting]['value']))
-	
+			text = self.delay(self.settings_dict[self.setting]['value'])
+		LCD.write(line2 = text, priority = 2, duration = 10)
+		
 	def shutdown(self):
+		LCD.write('Goodbye', 'center', ' ', priority = 4)
 		phase = 0
 		end = True
-		time.sleep(2)	#Damit alle Threads beendet sind
+		shutdown_flag = True
 		segment.clear()
-		lcd.clear()
-		lcd.cursor_pos = (0,0)
-		lcd.write_string("     Goodbye")
-		time.sleep(2)
+		time.sleep(4)
+		LCD.shutdown()
+		time.sleep(1)
 		subprocess.call(['shutdown', '-h', 'now'], shell=False)
 
 	def mute(self):
@@ -424,18 +420,7 @@ class LCDwriter():
 		to_change['priority'] = new_values['priority']
 		to_change['duration'] = new_values['duration']
 		return to_change
-
-
-settingController = settingMenu({0: {'name':'brightness', 'type': 'bar',   'value': 8},
-				 1: {'name':'volume', 	  'type': 'bar',   'value': 8},
-				 2: {'name':'delay', 	  'type': 'timer', 'value': 0}})
-lcdController = LCDwriter(CharLCD(cols=16, rows=2, pin_rs=4, pin_e=17, pins_data=[18,22,23,24],numbering_mode = GPIO.BCM))
-LightB = button(20, led_pin = 21)
-ModeB_left = button(26, settingController.left, settingController.next)
-ModeB_right = button(19, settingController.right, settingController.prev)
-PowerB = button(16, settingController.mute, settingController.shutdown)
-
-
+	
 def rocketengines():	#Flackern der Leds in den Triebwerken
 	engineLED.start(0)
 	for b in range(0,60):	#Für 3 Sekunden wird geflacker immer heller
@@ -470,7 +455,7 @@ def updatethread():	#Startzeit der nächsten Rakete wird ständig aus dem Intern
 	global data
 	last_check = 0
 	interval = 0
-	while True:
+	while shutdown_flag = False:
 		if time.time() >= last_check + interval:
 			if launchtime - time.time() >= 0 or launchtime - time.time() < -3598:
 				r = requests.get("https://launchlibrary.net/1.4.2/launch/next/1")	#Anfrage an Web-API, erhält JSON-Datei zurück
@@ -557,23 +542,12 @@ def displayInfo():	#Stelle Informationen zu der Mission auf LCD dar
 	while phase >= 1:
 		while int(time.time()) < (oldTime+10):
 			time.sleep(0.1)
-			while settingMode.showing == True:
-				time.sleep(0.1)
 		oldTime = int(time.time())
-		display(name, lsp)	#Zeige für 10 Sekunden Name der Rakete & Mission und Launch Service Provider
+		LCD.write(name, 'center', lsp, 'center')	#Zeige für 10 Sekunden Name der Rakete & Mission und Launch Service Provider
 		while int(time.time()) < (oldTime+10):
 			time.sleep(0.1)
-			while settingMode.showing == True:
-				time.sleep(0.1)
 		oldTime = int(time.time())
-		display(mission, launchpad)	#Zeige für 10 Sekunden Art der Mission und Start
-
-def display(line1, line2, priority = 0, duration = 0):	#Stelle 2 Zeilen auf LCD Display dar. Scrolle falls nötig.
-	
-		
-def clearLine(line):	#löscht nur den Inhalt einer Zeile, nicht gleich beide. "line" kann 0 oder 1 sein.
-	lcd.cursor_pos = (line,0)
-	lcd.write_string("                ")
+		LCD.write(mission, 'center', launchpad, 'center')	#Zeige für 10 Sekunden Art der Mission und Start
 
 def getInfo():	#erhalte Informationen zum Start von Web-API
 	try:
@@ -583,18 +557,26 @@ def getInfo():	#erhalte Informationen zum Start von Web-API
 		lsp = (data["launches"][0]["lsp"]["name"])	#lies den Namen des Launch Service Providers (z.B. SpaceX) ab
 		return (name, launchpad, mission, lsp)
 	except:
-		return (" "," "," "," ")
+		return (' ',' ',' ',' ')
 
 def displaytime():
 	colon = True	#Doppelpunkt auf Display ist dauerhaft an
 	segmentClock(datetime.fromtimestamp(launchtime).strftime('%H%M'))	#Stelle die Startzeit der Rakete in der eingestellten Zeitzone auf dem 7 Segment Display dar
 
-
+	
+settingController = settingMenu({0: {'name':'brightness', 'type': 'bar',   'value': 8},
+				 1: {'name':'volume', 	  'type': 'bar',   'value': 8},
+				 2: {'name':'delay', 	  'type': 'timer', 'value': 0}})
+LCD = LCDwriter(CharLCD(cols=16, rows=2, pin_rs=4, pin_e=17, pins_data=[18,22,23,24],numbering_mode = GPIO.BCM))
+LightB = button(20, led_pin = 21)
+ModeB_left = button(26, settingController.left, settingController.next)
+ModeB_right = button(19, settingController.right, settingController.prev)
+PowerB = button(16, settingController.mute, settingController.shutdown)
 updatelaunch = threading.Thread(target=updatethread)
 info = threading.Thread(target=displayInfo)
 countdown = threading.Thread(target=countdownthread)
 updatelaunch.start()	#Fang an, Startzeit und Status regelmäßig zu aktualisieren
-display("    Starting"," ")
+
 while True:
 	#Phase 0: Warte, bis der nächste Start einer Rakete 5 Stunden entfernt ist
 	#Setze alle Anzeigen und LEDs zurück
@@ -632,7 +614,7 @@ while True:
 		continue
 	#Phase 4: Start in 7 Sekunden, spiel Musik ab
 	phase = 4
-	GPIO.output(15, GPIO.LOW)
+	GPIO.output(15, GPIO.LOW) #Schaltet den Verstärker an (Pin
 	track.play()
 
 	waitForT(3, 0.1)	#Warte bis zur nächsten Phase
