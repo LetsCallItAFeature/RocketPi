@@ -420,7 +420,22 @@ class LCDwriter():
 		to_change['priority'] = new_values['priority']
 		to_change['duration'] = new_values['duration']
 		return to_change
-	
+
+def switchMode():
+	global mode
+	mode = !mode
+	if mode = True:
+		LCD.write('CLOCK', 'center', 'MODE', 'center', 3, 5)
+	else:
+		LCD.write('LAUNCH ONLY', 'center', 'MODE', 'center', 3, 5)
+		
+def sendStreamLink():
+	link = data['launches'][0]['vidURL']
+	if link != None:
+		send_data = {'type':'note', 'title':'Launch Stream', 'body':link}
+		resp = requests.post('https://api.pushbullet.com/api/pushes',data=send_data, auth=(PB_KEY,''))
+		LCD.write('link sent', 'center', ' ', 'center', 3, 1)
+
 def rocketengines():	#Flackern der Leds in den Triebwerken
 	engineLED.start(0)
 	for b in range(0,60):	#Für 3 Sekunden wird geflacker immer heller
@@ -568,7 +583,7 @@ settingController = settingMenu({0: {'name':'brightness', 'type': 'bar',   'valu
 				 1: {'name':'volume', 	  'type': 'bar',   'value': 8},
 				 2: {'name':'delay', 	  'type': 'timer', 'value': 0}})
 LCD = LCDwriter(CharLCD(cols=16, rows=2, pin_rs=4, pin_e=17, pins_data=[18,22,23,24],numbering_mode = GPIO.BCM))
-LightB = button(20, led_pin = 21)
+LightB = button(20, switchModes, sendStreamLink, 21)
 ModeB_left = button(26, settingController.left, settingController.next)
 ModeB_right = button(19, settingController.right, settingController.prev)
 PowerB = button(16, settingController.mute, settingController.shutdown)
