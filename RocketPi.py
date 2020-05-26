@@ -472,11 +472,16 @@ def updatethread():	#Startzeit der nächsten Rakete wird ständig aus dem Intern
 	interval = 0
 	while shutdown_flag = False:
 		if time.time() >= last_check + interval:
-			if launchtime - time.time() >= 0 or launchtime - time.time() < -3598:
-				r = requests.get("https://launchlibrary.net/1.4.2/launch/next/1")	#Anfrage an Web-API, erhält JSON-Datei zurück
+			with open('launch_demo_data.txt') as json_file:
+				demo = json.load(json_file)
+			if demo["active"] == True:
+				data = demo
 			else:
-				r = requests.get("https://launchlibrary.net/1.4.2/launch/" + str(launchid)) #Die Start-Reihenfolge der API rückt schnell nach dem Start aus, durch das Verwenden der ID wird verhindert, dass der nächste Start abgefragt wird während der Alte noch läuft.
-			data = r.json() #Wandel JSON in dictionary um
+				if launchtime - time.time() >= 0 or launchtime - time.time() < -3598:
+					r = requests.get("https://launchlibrary.net/1.4.2/launch/next/1")	#Anfrage an Web-API, erhält JSON-Datei zurück
+				else:
+					r = requests.get("https://launchlibrary.net/1.4.2/launch/" + str(launchid)) #Die Start-Reihenfolge der API rückt schnell nach dem Start aus, durch das Verwenden der ID wird verhindert, dass der nächste Start abgefragt wird während der Alte noch läuft.
+				data = r.json() #Wandel JSON in dictionary um
 			launchid = (data["launches"][0]["id"])
 			status = (data["launches"][0]["status"])	#Auslesen des Status des nächsten Starts
 			if status == 1:		#Status 1 = Startzeit der Rakete steht fest und Rakete hat GO
